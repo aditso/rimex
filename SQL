@@ -1,0 +1,82 @@
+/****** USING SQL ******/
+
+
+USE [Mydatabase]
+GO
+/****** Object:  StoredProcedure [dbo].[sp_ActualizaPrecioLista]    Script Date: 30/03/2022 08:21:44 a. m. ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER PROCEDURE [dbo].[sp_ActualizaPrecioLista]
+/*
+Elaboro: Edgar Santana
+Fecha Elaboración: 09/10/2020
+
+Descripción: Procedimiento que actualiza el precio de lista 
+en base a al % asignado en Categoria
+*/
+
+--Defiene parametro para el stored procedure
+
+AS
+DECLARE
+@PorcentajePrecioLista decimal(18,2),
+@IdI int,
+@Codigo nvarchar(50),
+@IdCategoria int
+
+--Establece tiempo máximo de espera para la ejecución del stored procedure
+SET lock_timeout 1800
+
+--Establece el incio de sentencias Transact-Sql 
+Begin Transaction
+
+	--Elimina de PrecioLista todos los de la categoria involucrada
+	Delete PrecioLista
+			
+	--Inserta en Preciolista desde el inventario todos los de la categoria
+	Insert Into PrecioLista (Codigo, Costo, Date1)
+		Select Codigo, CIntegral, Date1= GETDATE()
+		From Inventario
+			
+	--Actualiza en PrecioLista el campo PLista con el campo Costo + % de la categoria		
+	DECLARE cursor_PrecioLista Cursor SCROLL for
+	SELECT  IdI,Codigo,IdCategoria
+	FROM Inventario
+
+	OPEN cursor_PrecioLista
+
+
+		FETCH NEXT FROM cursor_PrecioLista
+		INTO @IdI,@Codigo,@IdCategoria
+		WHILE @@FETCH_STATUS = 0 
+		BEGIN
+		
+			Set @PorcentajePrecioLista = (Select PorcentajePrecioLista From Categoria Where IdCategoria= @IdCategoria)
+			Update PrecioLista
+			Set
+			PLista = Costo + (Costo * @PorcentajePrecioLista)
+			Where Codigo=@Codigo
+		   
+		   FETCH NEXT FROM cursor_PrecioLista
+		   INTO @IdI,@Codigo,@IdCategoria
+		END
+
+	CLOSE cursor_PrecioLista
+	DEALLOCATE cursor_PrecioLista			
+			
+	        
+--Comprueba el exito ofracaso de las sentencias SQL para aplicar las sentencias Transact-Sql
+IF @@Error = 0
+    BEGIN
+       Commit Transaction 
+       Return 
+    END
+ELSE
+    BEGIN
+       Rollback Transaction 
+       Return 
+    END
+
